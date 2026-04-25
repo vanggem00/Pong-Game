@@ -1,4 +1,4 @@
-// Simple Pong game
+// Simple Pong game with touch support, pause/win overlays, and keyboard remapping
 (() => {
   const canvas = document.getElementById('gameCanvas');
   const ctx = canvas.getContext('2d');
@@ -6,6 +6,17 @@
   const leftScoreEl = document.getElementById('leftScore');
   const rightScoreEl = document.getElementById('rightScore');
   const startBtn = document.getElementById('startBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const resumeBtn = document.getElementById('resumeBtn');
+  const restartBtn = document.getElementById('restartBtn');
+  const overlay = document.getElementById('overlay');
+  const overlayTitle = document.getElementById('overlayTitle');
+  const overlayMsg = document.getElementById('overlayMsg');
+
+  const winScoreInput = document.getElementById('winScore');
+  const touchToggle = document.getElementById('touchToggle');
+  const remapUpBtn = document.getElementById('remapUpBtn');
+  const remapDownBtn = document.getElementById('remapDownBtn');
   const soundToggle = document.getElementById('soundToggle');
 
   const W = canvas.width;
@@ -46,7 +57,14 @@
   let rightScore = 0;
   let running = false;
   let lastTime = 0;
-  let useMouse = true;
+  let gameOver = false;
+  let paused = false;
+
+  // Keyboard mapping (remappable)
+  let keyUp = 'ArrowUp';
+  let keyDown = 'ArrowDown';
+  let remapping = null; // 'up' or 'down' or null
+  const keyState = {}; // current pressed keys
 
   // sound
   const beep = (() => {
@@ -88,6 +106,9 @@
     updateScores();
     resetBall(Math.random() < 0.5);
     running = true;
+    gameOver = false;
+    paused = false;
+    hideOverlay();
     lastTime = performance.now();
     requestAnimationFrame(loop);
   }
@@ -104,33 +125,70 @@
     leftPaddle.y = clamp(y - leftPaddle.h / 2, 0, H - leftPaddle.h);
   });
 
-  // Keyboard controls
-  const keys = { ArrowUp: false, ArrowDown: false };
+  // Touch controls (mobile)
+  function handleTouch(e) {
+    if (!touchToggle.checked) return;
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    // Use the first touch to control paddle
+    const t = e.touches[0] || e.changedTouches[0];
+    if (!t) return;
+    const y = t.clientY - rect.top;
+    leftPaddle.y = clamp(y - leftPaddle.h / 2, 0, H - leftPaddle.h);
+  }
+  canvas.addEventListener('touchstart', handleTouch, { passive: false });
+  canvas.addEventListener('touchmove', handleTouch, { passive: false });
+
+  // Keyboard controls - dynamic mapping
   window.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-      keys[e.key] = true;
+    // If in remapping mode capture this key
+    if (remapping) {
       e.preventDefault();
+      const key = e.key;
+      if (remapping === 'up') {
+        keyUp = key;
+        remapUpBtn.textContent = keyUp;
+      } else if (remapping === 'down') {
+        keyDown = key;
+        remapDownBtn.textContent = keyDown;
+      }
+      remapping = null;
+      remapUpBtn.classList.remove('active');
+      remapDownBtn.classList.remove('active');
+      return;
     }
-    // Space to pause/start
+
+    // Normal behavior
+    keyState[e.key] = true;
+
+    // Space to start/pause/resume
     if (e.key === ' ' || e.code === 'Space') {
-      if (!running) {
+      e.preventDefault();
+      if (gameOver) {
         startGame();
       } else {
-        running = !running;
-        if (running) {
-          lastTime = performance.now();
-          requestAnimationFrame(loop);
-        }
+        togglePause();
       }
-      e.preventDefault();
     }
   });
 
   window.addEventListener('keyup', (e) => {
-    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-      keys[e.key] = false;
-      e.preventDefault();
-    }
+    keyState[e.key] = false;
+  });
+
+  // Remap buttons
+  remapUpBtn.addEventListener('click', () => {
+    remapping = 'up';
+    remapUpBtn.classList.add('active');
+    remapUpBtn.textContent = 'Press any key...';
+    remapDownBtn.classList.remove('active');
+  });
+
+  remapDownBtn.addEventListener('click', () => {
+    remapping = 'down';
+    remapDownBtn.classList.add('active');
+    remapDownBtn.textContent = 'Press any key...';
+    remapUpBtn.classList.remove('active');
   });
 
   // Utility
@@ -148,23 +206,22 @@
   function loop(now) {
     const dt = Math.min(1 / 30, (now - lastTime) / 1000);
     lastTime = now;
-    if (running) update(dt);
+    if (running && !paused && !gameOver) update(dt);
     draw();
     requestAnimationFrame(loop);
   }
 
   function update(dt) {
-    // Move left paddle with keyboard if pressed
-    if (keys.ArrowUp) leftPaddle.y -= leftPaddle.speed;
-    if (keys.ArrowDown) leftPaddle.y += leftPaddle.speed;
+    // Move left paddle with keyboard if pressed (mapped keys)
+    if (keyState[keyUp]) leftPaddle.y -= leftPaddle.speed;
+    if (keyState[keyDown]) leftPaddle.y += leftPaddle.speed;
     leftPaddle.y = clamp(leftPaddle.y, 0, H - leftPaddle.h);
 
     // Simple AI for right paddle: follow ball with limited speed and some easing
     const targetY = ball.y - rightPaddle.h / 2;
     const diff = targetY - rightPaddle.y;
-    // Add small intentional imperfection based on score difference
     const difficultyFactor = 1 + (leftScore - rightScore) * 0.08;
-    const aiSpeed = clamp(rightPaddle.speed * difficultyFactor, 2.5, 10);
+    const aiSpeed = clamp(rightPaddle.speed * difficultyFactor, 2.5, 12);
     rightPaddle.y += clamp(diff, -aiSpeed, aiSpeed);
     rightPaddle.y = clamp(rightPaddle.y, 0, H - rightPaddle.h);
 
@@ -185,9 +242,8 @@
 
     // Check paddle collisions
     if (checkPaddleCollision(leftPaddle, ball) && ball.vx < 0) {
-      // place ball just outside paddle to avoid sticking
       ball.x = leftPaddle.x + leftPaddle.w + ball.r + 0.1;
-      reflectFromPaddle(leftPaddle);
+      reflectFromPaddle(leftPaddle, false);
       playSound(320);
     } else if (checkPaddleCollision(rightPaddle, ball) && ball.vx > 0) {
       ball.x = rightPaddle.x - ball.r - 0.1;
@@ -200,14 +256,25 @@
       // right player scores
       rightScore += 1;
       updateScores();
-      running = true;
-      // Serve toward left player (ball moves to right next)
-      resetBall(false);
+      checkWinAndServe(false);
     } else if (ball.x - ball.r > W) {
       leftScore += 1;
       updateScores();
-      running = true;
-      resetBall(true);
+      checkWinAndServe(true);
+    }
+  }
+
+  function checkWinAndServe(servingToLeft) {
+    const winTo = Math.max(1, parseInt(winScoreInput.value, 10) || 5);
+    if (leftScore >= winTo || rightScore >= winTo) {
+      // someone won
+      gameOver = true;
+      running = false;
+      paused = false;
+      showOverlayWin();
+    } else {
+      // continue: serve toward the player who last lost (i.e., serve from center toward opponent)
+      resetBall(Math.random() < 0.5);
     }
   }
 
@@ -218,13 +285,12 @@
     const maxBounceAngle = Math.PI / 3; // 60 degrees
     const bounceAngle = normalizedRelativeIntersectionY * maxBounceAngle;
 
-    const direction = invert ? -1 : 1; // invert when hitting right paddle
+    // Determine direction so ball moves away from the paddle
+    const dir = paddle === leftPaddle ? 1 : -1;
     const newSpeed = ball.speed * 1.07; // speed up a bit each hit
     ball.speed = clamp(newSpeed, 5, 20);
 
-    ball.vx = direction * Math.cos(bounceAngle) * ball.speed * (invert ? -1 : 1);
-    // ensure vx points away from the paddle
-    ball.vx = Math.abs(ball.vx) * (invert ? -1 : 1);
+    ball.vx = dir * Math.cos(bounceAngle) * ball.speed;
     ball.vy = Math.sin(bounceAngle) * ball.speed;
   }
 
@@ -244,10 +310,6 @@
     // clear
     ctx.clearRect(0, 0, W, H);
 
-    // background subtle
-    ctx.fillStyle = 'rgba(0,0,0,0.0)';
-    ctx.fillRect(0, 0, W, H);
-
     // net
     drawNet();
 
@@ -265,8 +327,6 @@
     ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
-
-    // scores are in DOM; small debug info (optional)
   }
 
   function roundRectFill(ctx, x, y, w, h, r) {
@@ -280,15 +340,65 @@
     ctx.fill();
   }
 
-  // Start / restart button
+  // UI wiring
   startBtn.addEventListener('click', () => {
     startGame();
   });
 
-  // start initially paused, show stationary ball
+  pauseBtn.addEventListener('click', () => {
+    togglePause();
+  });
+
+  resumeBtn.addEventListener('click', () => {
+    hideOverlay();
+    paused = false;
+    if (!gameOver) {
+      running = true;
+      lastTime = performance.now();
+      requestAnimationFrame(loop);
+    }
+  });
+
+  restartBtn.addEventListener('click', () => {
+    startGame();
+  });
+
+  function togglePause() {
+    if (gameOver) return;
+    paused = !paused;
+    if (paused) {
+      showOverlayPaused();
+      running = false;
+    } else {
+      hideOverlay();
+      running = true;
+      lastTime = performance.now();
+      requestAnimationFrame(loop);
+    }
+  }
+
+  function showOverlayPaused() {
+    overlayTitle.textContent = 'Paused';
+    overlayMsg.textContent = 'Press Resume or Space to continue.';
+    overlay.classList.remove('hidden');
+  }
+
+  function showOverlayWin() {
+    overlayTitle.textContent = (leftScore > rightScore) ? 'You Win!' : 'Computer Wins';
+    overlayMsg.textContent = `Final score — You ${leftScore} : ${rightScore}. Press Restart or Space to play again.`;
+    overlay.classList.remove('hidden');
+  }
+
+  function hideOverlay() {
+    overlay.classList.add('hidden');
+  }
+
+  // Start state: paused with stationary ball
+  remapUpBtn.textContent = keyUp;
+  remapDownBtn.textContent = keyDown;
   resetBall(Math.random() < 0.5);
   draw();
 
-  // helpful: pause/resume with space, started in key handlers
+  // helpful: pause/resume with space already wired in key handler
 
 })();
