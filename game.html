@@ -9,20 +9,46 @@
 <body>
   <div class="container">
     <h1>Simple Pong</h1>
+
     <div id="scoreboard">
       <div class="score" id="leftScore">0</div>
       <div class="score" id="rightScore">0</div>
     </div>
 
-    <canvas id="gameCanvas" width="800" height="500"></canvas>
+    <canvas id="gameCanvas" width="800" height="500" aria-label="Pong game canvas"></canvas>
 
     <div class="controls">
-      Controls: Move your mouse over the canvas to control the left paddle. Or use Arrow Up / Arrow Down.
+      Controls: Move your mouse over the canvas or touch on mobile to control the left paddle. Or use the mapped keys (default Arrow Up / Arrow Down).
+    </div>
+
+    <div class="settings">
+      <label>Winning score (first to):
+        <input type="number" id="winScore" value="5" min="1" max="50" />
+      </label>
+
+      <label><input type="checkbox" id="touchToggle" checked /> Enable touch controls</label>
+
+      <label>Remap Up: <button id="remapUpBtn">ArrowUp</button></label>
+      <label>Remap Down: <button id="remapDownBtn">ArrowDown</button></label>
+
+      <label><input type="checkbox" id="soundToggle" checked /> Sound</label>
     </div>
 
     <div class="footer">
       <button id="startBtn">Start / Restart</button>
-      <label><input type="checkbox" id="soundToggle" checked /> Sound</label>
+      <button id="pauseBtn">Pause</button>
+    </div>
+  </div>
+
+  <!-- Overlay for pause and win screens -->
+  <div id="overlay" class="hidden" role="dialog" aria-modal="true">
+    <div class="overlay-content" id="overlayContent">
+      <h2 id="overlayTitle">Paused</h2>
+      <p id="overlayMsg">Press Resume to continue.</p>
+      <div class="overlay-actions">
+        <button id="resumeBtn">Resume</button>
+        <button id="restartBtn">Restart</button>
+      </div>
     </div>
   </div>
 
