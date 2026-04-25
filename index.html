@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Simple Pong</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="container">
+    <h1>Simple Pong</h1>
+    <div id="scoreboard">
+      <div class="score" id="leftScore">0</div>
+      <div class="score" id="rightScore">0</div>
+    </div>
+
+    <canvas id="gameCanvas" width="800" height="500"></canvas>
+
+    <div class="controls">
+      Controls: Move your mouse over the canvas to control the left paddle. Or use Arrow Up / Arrow Down.
+    </div>
+
+    <div class="footer">
+      <button id="startBtn">Start / Restart</button>
+      <label><input type="checkbox" id="soundToggle" checked /> Sound</label>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
